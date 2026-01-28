@@ -133,9 +133,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func setupMenuBar() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
-        if let button = statusItem?.button {
-            button.title = "🛌"
-        }
+        // Icon will be set by checkTime() on first run
 
         let menu = NSMenu()
 
@@ -162,10 +160,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApplication.shared.terminate(nil)
     }
 
+    func getIconForHour(_ hour: Int) -> String {
+        if hour >= 2 && hour < 6 {
+            // Bedtime: 2 AM - 6 AM
+            return "🛌"
+        } else if hour >= 6 && hour < 20 {
+            // Daytime: 6 AM - 8 PM
+            return "☀️"
+        } else {
+            // Night: 8 PM - 2 AM
+            return "🌙"
+        }
+    }
+
+    func updateMenuBarIcon(_ hour: Int) {
+        if let button = statusItem?.button {
+            button.title = getIconForHour(hour)
+        }
+    }
+
     @objc func checkTime() {
         let calendar = Calendar.current
         let now = Date()
         let hour = calendar.component(.hour, from: now)
+
+        // Update menu bar icon based on time
+        updateMenuBarIcon(hour)
 
         // Between 2 AM (02:00) and 6 AM (06:00) - nag time!
         if hour >= 2 && hour < 6 {
@@ -237,7 +257,7 @@ if !CommandLine.arguments.contains("--backgrounded") {
     do {
         try task.run()
         print("🌙 Bedtime Nag launched in background (PID: \(task.processIdentifier))")
-        print("   Check menu bar for 🛌 icon")
+        print("   Check menu bar for icon (☀️ day, 🌙 night, 🛌 bedtime)")
         print("   To stop: pkill BedtimeNag")
         exit(0)
     } catch {

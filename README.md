@@ -12,7 +12,7 @@ A macOS app that aggressively reminds you to go to bed when it's past 2 AM.
 - 📚 **Piling Up**: New windows spawn every 30 seconds after 2 AM
 - 🎯 **Always On Top**: Windows float above all other apps
 - 💥 **Bouncing Windows**: Windows bounce around your screen chaotically like DVD screensavers
-- 🛌 **Menu Bar Control**: Access from menu bar icon to quit or clear windows
+- 🛌 **Dynamic Menu Bar Icon**: Icon changes based on time (☀️ day, 🌙 night, 🛌 bedtime)
 - 🔒 **Lock to Dismiss**: Only way to clear windows is to lock your laptop
 - 👻 **Auto-Background**: Automatically forks to background when launched
 
@@ -34,7 +34,10 @@ make
 make run
 ```
 
-The app will automatically launch in the background and return control to your terminal. Look for the 🛌 icon in your menu bar (top-right).
+The app will automatically launch in the background and return control to your terminal. Look for an icon in your menu bar (top-right):
+- ☀️ Daytime (6 AM - 8 PM)
+- 🌙 Night (8 PM - 2 AM)
+- 🛌 Bedtime (2 AM - 6 AM)
 
 ## Run at Startup (Optional)
 
