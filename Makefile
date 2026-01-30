@@ -1,4 +1,4 @@
-.PHONY: all build run clean kill help
+.PHONY: all build run clean kill help app
 
 # Default target
 all: build
@@ -9,6 +9,17 @@ build:
 	@swiftc Sources/main.swift -o BedtimeNag -framework Cocoa
 	@echo "✅ Build successful!"
 
+# Build .app bundle
+app: build
+	@echo "📦 Creating BedtimeNag.app bundle..."
+	@rm -rf BedtimeNag.app
+	@mkdir -p BedtimeNag.app/Contents/MacOS
+	@mkdir -p BedtimeNag.app/Contents/Resources
+	@cp BedtimeNag BedtimeNag.app/Contents/MacOS/
+	@cp Info.plist BedtimeNag.app/Contents/
+	@echo "✅ App bundle created: BedtimeNag.app"
+	@echo "   You can now drag it to /Applications or run it from Finder"
+
 # Build and run
 run: build
 	@./BedtimeNag
@@ -17,6 +28,7 @@ run: build
 clean:
 	@echo "🧹 Cleaning..."
 	@rm -f BedtimeNag
+	@rm -rf BedtimeNag.app
 	@echo "✨ Clean complete"
 
 # Kill running instances
@@ -30,6 +42,7 @@ help:
 	@echo ""
 	@echo "  make          - Build the app (default)"
 	@echo "  make build    - Build the app"
+	@echo "  make app      - Build .app bundle for macOS"
 	@echo "  make run      - Build and run the app"
 	@echo "  make clean    - Remove build artifacts"
 	@echo "  make kill     - Stop all running instances"

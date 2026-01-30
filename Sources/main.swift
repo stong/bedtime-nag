@@ -5,6 +5,7 @@ class BedtimeNagWindow: NSWindow {
     var bounceTimer: Timer?
     var velocityX: CGFloat = 0
     var velocityY: CGFloat = 0
+    var colorHue: CGFloat = 0.0
 
     init() {
         let screenSize = NSScreen.main?.frame ?? NSRect(x: 0, y: 0, width: 400, height: 200)
@@ -23,7 +24,10 @@ class BedtimeNagWindow: NSWindow {
 
         self.level = .floating
         self.isOpaque = false
-        self.backgroundColor = NSColor(calibratedRed: 1.0, green: 0.3, blue: 0.3, alpha: 0.95)
+
+        // Start with random color
+        colorHue = CGFloat.random(in: 0...1)
+        self.backgroundColor = NSColor(hue: colorHue, saturation: 0.8, brightness: 0.9, alpha: 0.95)
         self.title = "⏰ BEDTIME!"
 
         // Remove close button
@@ -67,28 +71,47 @@ class BedtimeNagWindow: NSWindow {
         newFrame.origin.x += velocityX
         newFrame.origin.y += velocityY
 
+        var didBounce = false
+
         // Bounce off edges
-        if newFrame.origin.x <= screenFrame.minX || newFrame.maxX >= screenFrame.maxX {
-            velocityX *= -1
-            // Add some randomness to make it more chaotic
-            velocityX += CGFloat.random(in: -2...2)
+        if newFrame.origin.x <= screenFrame.minX {
+            velocityX = abs(velocityX) + CGFloat.random(in: -1...1)
+            newFrame.origin.x = screenFrame.minX + 1
+            didBounce = true
+        } else if newFrame.maxX >= screenFrame.maxX {
+            velocityX = -(abs(velocityX) + CGFloat.random(in: -1...1))
+            newFrame.origin.x = screenFrame.maxX - newFrame.width - 1
+            didBounce = true
         }
 
-        if newFrame.origin.y <= screenFrame.minY || newFrame.maxY >= screenFrame.maxY {
-            velocityY *= -1
-            // Add some randomness to make it more chaotic
-            velocityY += CGFloat.random(in: -2...2)
+        if newFrame.origin.y <= screenFrame.minY {
+            velocityY = abs(velocityY) + CGFloat.random(in: -1...1)
+            newFrame.origin.y = screenFrame.minY + 1
+            didBounce = true
+        } else if newFrame.maxY >= screenFrame.maxY {
+            velocityY = -(abs(velocityY) + CGFloat.random(in: -1...1))
+            newFrame.origin.y = screenFrame.maxY - newFrame.height - 1
+            didBounce = true
         }
 
         // Keep velocity from getting too slow or too fast
-        velocityX = max(-10, min(10, velocityX))
-        velocityY = max(-10, min(10, velocityY))
+        velocityX = max(-8, min(8, velocityX))
+        velocityY = max(-8, min(8, velocityY))
 
-        // Keep window on screen
-        newFrame.origin.x = max(screenFrame.minX, min(newFrame.origin.x, screenFrame.maxX - newFrame.width))
-        newFrame.origin.y = max(screenFrame.minY, min(newFrame.origin.y, screenFrame.maxY - newFrame.height))
+        // Ensure minimum velocity to prevent stopping
+        if abs(velocityX) < 2 { velocityX = velocityX < 0 ? -3 : 3 }
+        if abs(velocityY) < 2 { velocityY = velocityY < 0 ? -3 : 3 }
 
         self.setFrame(newFrame, display: true)
+
+        // Change color only when bouncing off an edge
+        if didBounce {
+            colorHue += 0.15
+            if colorHue > 1.0 {
+                colorHue -= 1.0
+            }
+            self.backgroundColor = NSColor(hue: colorHue, saturation: 0.8, brightness: 0.9, alpha: 0.95)
+        }
     }
 
     deinit {
