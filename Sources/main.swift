@@ -1,6 +1,162 @@
 import Cocoa
 import Foundation
 
+class PasswordDialog: NSWindow, NSWindowDelegate {
+    var password: String = ""
+    var enteredPassword: String = ""
+    var passwordLabel: NSTextField?
+    var entryLabel: NSTextField?
+    var onSuccess: (() -> Void)?
+
+    init(onSuccess: @escaping () -> Void) {
+        self.onSuccess = onSuccess
+
+        // Generate random 10-digit password
+        password = String((0..<10).map { _ in String(Int.random(in: 0...9)) }.joined())
+
+        let rect = NSRect(x: 0, y: 0, width: 500, height: 250)
+        super.init(
+            contentRect: rect,
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+
+        self.title = "Enter Password to Clear Windows"
+        self.level = .modalPanel
+
+        setupUI()
+        self.delegate = self
+        self.center()
+    }
+
+    func setupUI() {
+        guard let contentView = self.contentView else { return }
+
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .centerX
+        stack.spacing = 20
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 20),
+            stack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
+            stack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
+        ])
+
+        // Title
+        let titleLabel = NSTextField(labelWithString: "Type this password using the buttons:")
+        titleLabel.alignment = .center
+        stack.addArrangedSubview(titleLabel)
+
+        // Password display
+        passwordLabel = NSTextField(labelWithString: password)
+        passwordLabel?.isBordered = true
+        passwordLabel?.isEditable = false
+        passwordLabel?.backgroundColor = .textBackgroundColor
+        passwordLabel?.textColor = .labelColor
+        passwordLabel?.alignment = .center
+        stack.addArrangedSubview(passwordLabel!)
+
+        // Entry title
+        let entryTitle = NSTextField(labelWithString: "Your entry:")
+        entryTitle.alignment = .center
+        stack.addArrangedSubview(entryTitle)
+
+        // Entry display
+        entryLabel = NSTextField(labelWithString: "")
+        entryLabel?.isBordered = true
+        entryLabel?.isEditable = false
+        entryLabel?.backgroundColor = .textBackgroundColor
+        entryLabel?.textColor = .labelColor
+        entryLabel?.alignment = .center
+        stack.addArrangedSubview(entryLabel!)
+
+        // Keyboard row: 1,2,3,4,5,6,7,8,9,0
+        let buttonRow = NSStackView()
+        buttonRow.orientation = .horizontal
+        buttonRow.spacing = 4
+        stack.addArrangedSubview(buttonRow)
+
+        for num in 1...9 {
+            let button = NSButton(title: "\(num)", target: self, action: #selector(numberPressed(_:)))
+            button.bezelStyle = .rounded
+            button.tag = num
+            buttonRow.addArrangedSubview(button)
+        }
+
+        let zeroButton = NSButton(title: "0", target: self, action: #selector(numberPressed(_:)))
+        zeroButton.bezelStyle = .rounded
+        zeroButton.tag = 0
+        buttonRow.addArrangedSubview(zeroButton)
+
+        // Action buttons
+        let actionRow = NSStackView()
+        actionRow.orientation = .horizontal
+        actionRow.spacing = 20
+        stack.addArrangedSubview(actionRow)
+
+        let clearButton = NSButton(title: "Clear", target: self, action: #selector(clearPressed))
+        clearButton.bezelStyle = .rounded
+        actionRow.addArrangedSubview(clearButton)
+
+        let submitButton = NSButton(title: "Submit", target: self, action: #selector(submitPressed))
+        submitButton.bezelStyle = .rounded
+        actionRow.addArrangedSubview(submitButton)
+    }
+
+    @objc func numberPressed(_ sender: NSButton) {
+        if enteredPassword.count < 10 {
+            enteredPassword += "\(sender.tag)"
+            entryLabel?.stringValue = enteredPassword
+            NSSound.beep()
+        }
+    }
+
+    @objc func clearPressed() {
+        enteredPassword = ""
+        entryLabel?.stringValue = ""
+    }
+
+    @objc func submitPressed() {
+        if enteredPassword == password {
+            NSSound(named: "Glass")?.play()
+            onSuccess?()
+            self.close()
+        } else {
+            NSSound(named: "Basso")?.play()
+
+            // Shake the window
+            let originalFrame = self.frame
+            let shakeDistance: CGFloat = 10
+
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = 0.05
+                self.animator().setFrameOrigin(NSPoint(x: originalFrame.origin.x - shakeDistance, y: originalFrame.origin.y))
+            }, completionHandler: {
+                NSAnimationContext.runAnimationGroup({ context in
+                    context.duration = 0.05
+                    self.animator().setFrameOrigin(NSPoint(x: originalFrame.origin.x + shakeDistance, y: originalFrame.origin.y))
+                }, completionHandler: {
+                    NSAnimationContext.runAnimationGroup({ context in
+                        context.duration = 0.05
+                        self.animator().setFrameOrigin(originalFrame.origin)
+                    }, completionHandler: nil)
+                })
+            })
+
+            enteredPassword = ""
+            entryLabel?.stringValue = ""
+        }
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        // If window is closed without success, do nothing
+    }
+}
+
 class BedtimeNagWindow: NSWindow {
     var bounceTimer: Timer?
     var velocityX: CGFloat = 0
@@ -258,11 +414,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func clearWindows() {
-        for window in windows {
-            window.close()
+        // Show password dialog
+        let dialog = PasswordDialog { [weak self] in
+            // Only clear if password was correct
+            for window in self?.windows ?? [] {
+                window.close()
+            }
+            self?.windows.removeAll()
+            print("✨ All windows cleared")
         }
-        windows.removeAll()
-        print("✨ All windows cleared")
+        dialog.makeKeyAndOrderFront(nil)
     }
 }
 
