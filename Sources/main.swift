@@ -1,18 +1,26 @@
 import Cocoa
 import Foundation
 
+// Configuration
+let INITIAL_PASSWORD_LENGTH = 6
+let MAX_WINDOWS = 20
+
 class PasswordDialog: NSWindow, NSWindowDelegate {
     var password: String = ""
     var enteredPassword: String = ""
     var passwordLabel: NSTextField?
     var entryLabel: NSTextField?
     var onSuccess: (() -> Void)?
+    var bounceTimer: Timer?
+    var velocityX: CGFloat = 0
+    var velocityY: CGFloat = 0
+    var buttonRow: NSStackView?
 
-    init(onSuccess: @escaping () -> Void) {
+    init(passwordLength: Int, onSuccess: @escaping () -> Void) {
         self.onSuccess = onSuccess
 
-        // Generate random 10-digit password
-        password = String((0..<10).map { _ in String(Int.random(in: 0...9)) }.joined())
+        // Generate random password of specified length
+        password = String((0..<passwordLength).map { _ in String(Int.random(in: 0...9)) }.joined())
 
         let rect = NSRect(x: 0, y: 0, width: 500, height: 250)
         super.init(
@@ -22,12 +30,67 @@ class PasswordDialog: NSWindow, NSWindowDelegate {
             defer: false
         )
 
+        self.isReleasedWhenClosed = false
+
         self.title = "Enter Password to Clear Windows"
         self.level = .modalPanel
 
         setupUI()
         self.delegate = self
         self.center()
+
+        // Random initial velocity for bouncing
+        velocityX = CGFloat.random(in: -3...3)
+        velocityY = CGFloat.random(in: -3...3)
+
+        // Start bouncing
+        startBouncing()
+    }
+
+    func startBouncing() {
+        bounceTimer = Timer.scheduledTimer(withTimeInterval: 0.03, repeats: true) { [weak self] _ in
+            self?.bounce()
+        }
+    }
+
+    func bounce() {
+        guard let screen = NSScreen.main else { return }
+        let screenFrame = screen.visibleFrame
+
+        var newFrame = self.frame
+        newFrame.origin.x += velocityX
+        newFrame.origin.y += velocityY
+
+        // Bounce off edges
+        if newFrame.origin.x <= screenFrame.minX {
+            velocityX = abs(velocityX) + CGFloat.random(in: -1...1)
+            newFrame.origin.x = screenFrame.minX + 1
+        } else if newFrame.maxX >= screenFrame.maxX {
+            velocityX = -(abs(velocityX) + CGFloat.random(in: -1...1))
+            newFrame.origin.x = screenFrame.maxX - newFrame.width - 1
+        }
+
+        if newFrame.origin.y <= screenFrame.minY {
+            velocityY = abs(velocityY) + CGFloat.random(in: -1...1)
+            newFrame.origin.y = screenFrame.minY + 1
+        } else if newFrame.maxY >= screenFrame.maxY {
+            velocityY = -(abs(velocityY) + CGFloat.random(in: -1...1))
+            newFrame.origin.y = screenFrame.maxY - newFrame.height - 1
+        }
+
+        // Keep velocity from getting too slow or too fast
+        velocityX = max(-5, min(5, velocityX))
+        velocityY = max(-5, min(5, velocityY))
+
+        // Ensure minimum velocity to prevent stopping
+        if abs(velocityX) < 2 { velocityX = velocityX < 0 ? -2 : 2 }
+        if abs(velocityY) < 2 { velocityY = velocityY < 0 ? -2 : 2 }
+
+        self.setFrame(newFrame, display: true)
+    }
+
+    deinit {
+        bounceTimer?.invalidate()
     }
 
     func setupUI() {
@@ -75,22 +138,22 @@ class PasswordDialog: NSWindow, NSWindowDelegate {
         stack.addArrangedSubview(entryLabel!)
 
         // Keyboard row: 1,2,3,4,5,6,7,8,9,0
-        let buttonRow = NSStackView()
-        buttonRow.orientation = .horizontal
-        buttonRow.spacing = 4
-        stack.addArrangedSubview(buttonRow)
+        buttonRow = NSStackView()
+        buttonRow!.orientation = .horizontal
+        buttonRow!.spacing = 4
+        stack.addArrangedSubview(buttonRow!)
 
         for num in 1...9 {
             let button = NSButton(title: "\(num)", target: self, action: #selector(numberPressed(_:)))
             button.bezelStyle = .rounded
             button.tag = num
-            buttonRow.addArrangedSubview(button)
+            buttonRow!.addArrangedSubview(button)
         }
 
         let zeroButton = NSButton(title: "0", target: self, action: #selector(numberPressed(_:)))
         zeroButton.bezelStyle = .rounded
         zeroButton.tag = 0
-        buttonRow.addArrangedSubview(zeroButton)
+        buttonRow!.addArrangedSubview(zeroButton)
 
         // Action buttons
         let actionRow = NSStackView()
@@ -108,10 +171,34 @@ class PasswordDialog: NSWindow, NSWindowDelegate {
     }
 
     @objc func numberPressed(_ sender: NSButton) {
-        if enteredPassword.count < 10 {
+        if enteredPassword.count < password.count {
             enteredPassword += "\(sender.tag)"
             entryLabel?.stringValue = enteredPassword
             NSSound.beep()
+
+            // Shuffle the button order
+            shuffleButtons()
+        }
+    }
+
+    func shuffleButtons() {
+        guard let buttonRow = buttonRow else { return }
+
+        // Get all buttons
+        var buttons = buttonRow.arrangedSubviews.compactMap { $0 as? NSButton }
+
+        // Remove all buttons from the stack
+        for button in buttons {
+            buttonRow.removeArrangedSubview(button)
+            button.removeFromSuperview()
+        }
+
+        // Shuffle the buttons
+        buttons.shuffle()
+
+        // Add them back in shuffled order
+        for button in buttons {
+            buttonRow.addArrangedSubview(button)
         }
     }
 
@@ -122,8 +209,8 @@ class PasswordDialog: NSWindow, NSWindowDelegate {
 
     @objc func submitPressed() {
         if enteredPassword == password {
-            NSSound(named: "Glass")?.play()
-            onSuccess?()
+            let callback = onSuccess
+            callback?()
             self.close()
         } else {
             NSSound(named: "Basso")?.play()
@@ -275,11 +362,14 @@ class BedtimeNagWindow: NSWindow {
     }
 }
 
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var windows: [BedtimeNagWindow] = []
     var timer: Timer?
     var nagTimer: Timer?
     var statusItem: NSStatusItem?
+    var passwordLength: Int = INITIAL_PASSWORD_LENGTH
+    var passwordDialog: PasswordDialog?
+    var clearMenuItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         print("🌙 Bedtime Nag started...")
@@ -315,6 +405,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Icon will be set by checkTime() on first run
 
         let menu = NSMenu()
+        menu.autoenablesItems = false
+        menu.delegate = self
 
         let statusMenuItem = NSMenuItem(title: "Bedtime Nag", action: nil, keyEquivalent: "")
         statusMenuItem.isEnabled = false
@@ -322,9 +414,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(NSMenuItem.separator())
 
-        let clearItem = NSMenuItem(title: "Clear Windows", action: #selector(clearWindows), keyEquivalent: "c")
-        clearItem.target = self
-        menu.addItem(clearItem)
+        clearMenuItem = NSMenuItem(title: "Clear Windows", action: #selector(clearWindowsButton), keyEquivalent: "c")
+        clearMenuItem?.target = self
+        menu.addItem(clearMenuItem!)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -333,6 +425,41 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(quitItem)
 
         statusItem?.menu = menu
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        // Update Clear Windows menu item based on dialog visibility
+        clearMenuItem?.isEnabled = !isPasswordDialogOpen()
+    }
+
+    func isPasswordDialogOpen() -> Bool {
+        return passwordDialog?.isVisible == true
+    }
+
+    @objc func clearWindowsButton() {
+        // Failsafe: don't open multiple dialogs
+        if isPasswordDialogOpen() {
+            print("⚠️ Password dialog already open")
+            return
+        }
+
+        // Disable menu item while dialog is open
+        clearMenuItem?.isEnabled = false
+
+        // Show password dialog
+        passwordDialog = PasswordDialog(passwordLength: passwordLength) { [weak self] in
+            // Only clear if password was correct
+            self?.clearWindows()
+
+            // Increase password length by 3 for next time
+            self?.passwordLength += 3
+            print("🔒 Password length increased to \(self?.passwordLength ?? 0)")
+
+            self?.passwordDialog = nil
+            // Re-enable menu item
+            self?.clearMenuItem?.isEnabled = true
+        }
+        passwordDialog?.makeKeyAndOrderFront(nil)
     }
 
     @objc func quitApp() {
@@ -398,9 +525,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         nagTimer?.invalidate()
         nagTimer = nil
         clearWindows()
+        passwordLength = INITIAL_PASSWORD_LENGTH
+        print("☀️ Password length reset to \(INITIAL_PASSWORD_LENGTH)")
     }
 
     @objc func spawnWindow() {
+        if windows.count >= MAX_WINDOWS {
+            print("⚠️ Max windows (\(MAX_WINDOWS)) reached, not spawning more")
+            return
+        }
         let window = BedtimeNagWindow()
         window.makeKeyAndOrderFront(nil)
         windows.append(window)
@@ -414,21 +547,39 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func clearWindows() {
-        // Show password dialog
-        let dialog = PasswordDialog { [weak self] in
-            // Only clear if password was correct
-            for window in self?.windows ?? [] {
-                window.close()
-            }
-            self?.windows.removeAll()
-            print("✨ All windows cleared")
+        for window in self.windows {
+            window.close()
         }
-        dialog.makeKeyAndOrderFront(nil)
+        self.windows.removeAll()
+        print("✨ All windows cleared")
     }
 }
 
-// Auto-background if not already backgrounded
-if !CommandLine.arguments.contains("--backgrounded") {
+// Check for existing instance using PID file
+let lockFilePath = NSTemporaryDirectory() + "bedtime-nag.lock"
+let fileManager = FileManager.default
+
+if fileManager.fileExists(atPath: lockFilePath) {
+    // Read existing PID
+    if let pidString = try? String(contentsOfFile: lockFilePath, encoding: .utf8),
+       let existingPID = Int32(pidString.trimmingCharacters(in: .whitespacesAndNewlines)) {
+        // Check if process is still running (kill with signal 0 doesn't kill, just checks)
+        if kill(existingPID, 0) == 0 {
+            print("❌ Another instance of Bedtime Nag is already running (PID: \(existingPID))")
+            exit(1)
+        } else {
+            print("⚠️ Found stale lock file from PID \(existingPID), removing")
+        }
+    }
+}
+
+// Write our PID to the lock file
+let ourPID = getpid()
+try? String(ourPID).write(toFile: lockFilePath, atomically: true, encoding: .utf8)
+print("🔒 Created lock file with PID \(ourPID)")
+
+// Auto-background if not already backgrounded (unless --no-fork is specified)
+if !CommandLine.arguments.contains("--backgrounded") && !CommandLine.arguments.contains("--no-fork") {
     let executablePath = CommandLine.arguments[0]
 
     // Launch in background and exit

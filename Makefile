@@ -1,4 +1,4 @@
-.PHONY: all build run clean kill help app
+.PHONY: all build debug run clean kill help app
 
 # Default target
 all: build
@@ -8,6 +8,12 @@ build:
 	@echo "🔨 Building Bedtime Nag..."
 	@swiftc Sources/main.swift -o BedtimeNag -framework Cocoa
 	@echo "✅ Build successful!"
+
+# Build with debug symbols
+debug:
+	@echo "🔨 Building Bedtime Nag (debug)..."
+	@swiftc -g -Onone Sources/main.swift -o BedtimeNag -framework Cocoa
+	@echo "✅ Debug build successful!"
 
 # Build .app bundle
 app: build
@@ -42,6 +48,7 @@ help:
 	@echo ""
 	@echo "  make          - Build the app (default)"
 	@echo "  make build    - Build the app"
+	@echo "  make debug    - Build with debug symbols"
 	@echo "  make app      - Build .app bundle for macOS"
 	@echo "  make run      - Build and run the app"
 	@echo "  make clean    - Remove build artifacts"
